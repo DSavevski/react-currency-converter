@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useEffect} from 'react';
 import {makeStyles} from '@material-ui/core/styles';
 import InputLabel from '@material-ui/core/InputLabel';
 import MenuItem from '@material-ui/core/MenuItem';
@@ -6,8 +6,10 @@ import FormControl from '@material-ui/core/FormControl';
 import Select from '@material-ui/core/Select';
 import Grid from "@material-ui/core/Grid";
 import {availableCurrencies} from "./sample-data";
-import {axios} from 'axios';
+import axios from 'axios';
 import TextField from "@material-ui/core/TextField/TextField";
+import numeral from 'numeral';
+import CurrencyChart from "./CurrencyChart";
 
 const useStyles = makeStyles(theme => ({
     grid: {
@@ -17,51 +19,52 @@ const useStyles = makeStyles(theme => ({
     formControl: {
         minWidth: 425,
     },
-    selectEmpty: {
-        marginTop: theme.spacing(2),
-    },
-    textField: {
-        marginLeft: theme.spacing(1),
-        marginRight: theme.spacing(1),
-        width: 200,
-    }
+
 }));
 
 
 const CurrencyConverter = () => {
+    // props
     const classes = useStyles();
 
     const [selectedBaseCurrency, setSelectedBaseCurrency] = useState('EUR');
-    const [selectedCounterCurrency, setSelectedCounterCurrency] = useState('USD');
-
     const [currentBaseAmount, setCurrentBaseAmount] = useState(0);
+
+    const [selectedCounterCurrency, setSelectedCounterCurrency] = useState('');
     const [currentCounterAmount, setCurrentCounterAmount] = useState(0);
 
     const [basedConversionRates, setBasedConversionRates] = useState([]);
-
     const [counterCurrencyNames, setCounterCurrencyNames] = useState([]);
 
-    const getBasedCurrency = async (base) => {
-        const url = `https://api.exchangeratesapi.io/latest?base=${base}`;
-        try {
-            const result = await axios.get(url);
-            setBasedConversionRates(result.data['rates']);
-            setCounterCurrencyNames(Object.keys(result.data['rates']));
-            updateBaseAmount(currentBaseAmount);
-        } catch (e) {
-            throw new Error('Could not retrieve rates');
-        }
-    };
-
     const updateBaseAmount = (value) => {
+
         setCurrentBaseAmount(value);
-        setCurrentCounterAmount(currentBaseAmount * basedConversionRates[selectedCounterCurrency]);
+        const result = value * basedConversionRates[selectedCounterCurrency] || 0;
+        setCurrentCounterAmount(result);
     };
 
     const updateCounterAmount = (value) => {
         setCurrentCounterAmount(value);
-        setCurrentBaseAmount(currentCounterAmount / basedConversionRates[selectedCounterCurrency]);
+        setCurrentBaseAmount(value / basedConversionRates[selectedCounterCurrency]);
     };
+
+    // Effects
+    useEffect(() => {
+        const getBasedCurrency = async () => {
+            const url = `https://api.exchangeratesapi.io/latest?base=${selectedBaseCurrency}`;
+            const result = await axios.get(url);
+            setBasedConversionRates(result.data['rates']);
+            setCounterCurrencyNames(Object.keys(result.data['rates']));
+            setSelectedCounterCurrency (Object.keys(result.data['rates'])[0]);
+        };
+        getBasedCurrency(selectedBaseCurrency);
+    }, [selectedBaseCurrency]);
+
+    useEffect(() => {
+        const result = currentBaseAmount * basedConversionRates[selectedCounterCurrency] || 0;
+        setCurrentCounterAmount(result);
+    }, [basedConversionRates, currentBaseAmount, selectedCounterCurrency]);
+
 
     return (
         <div id="container" className={classes.grid}>
@@ -72,31 +75,25 @@ const CurrencyConverter = () => {
                 <Grid item xs={6}>
                     <FormControl className={classes.formControl}>
                         <TextField
-                            id="base-currency"
                             label="Base currency"
-                            value={currentBaseAmount}
-                            onChange={event => setCurrentBaseAmount(event.target.value)}
-                            type="number"
-                            className={classes.textField}
-                            InputLabelProps={{
-                                shrink: true,
+                            value={numeral(currentBaseAmount).format('0.00')}
+                            onChange={event => {
+                                updateBaseAmount(event.target.value);
                             }}
-                            margin="normal"
+                            type="number"
                         />
                     </FormControl>
                 </Grid>
                 <Grid item xs={6}>
                     <FormControl className={classes.formControl}>
-                        <InputLabel htmlFor="base-currency">Base amount</InputLabel>
+                        <InputLabel>Base amount</InputLabel>
                         <Select
                             value={selectedBaseCurrency}
                             onChange={(event) => {
                                 setSelectedBaseCurrency(event.target.value);
-                                getBasedCurrency(event.target.value);
-                            }}
-                            inputProps={{name: 'baseCurrency', id: 'base-currency'}}>
+                            }}>
                             {availableCurrencies.map(curr => (
-                                <MenuItem value={curr}>{curr}</MenuItem>
+                                <MenuItem value={curr} key={curr}>{curr}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
@@ -110,36 +107,28 @@ const CurrencyConverter = () => {
                 <Grid item xs={6}>
                     <FormControl className={classes.formControl}>
                         <TextField
-                            id="base-currency"
-                            label="Base currency"
-                            value={currentBaseAmount}
-                            onChange={event => setCurrentBaseAmount(event.target.value)}
-                            type="number"
-                            className={classes.textField}
-                            InputLabelProps={{
-                                shrink: true,
-                            }}
-                            margin="normal"
-                        />
+                            label="Counter currency"
+                            value={numeral(currentCounterAmount).format('0.00')}
+                            onChange={event => updateCounterAmount(event.target.value)}
+                            type="number"/>
                     </FormControl>
                 </Grid>
                 <Grid item xs={6}>
                     <FormControl className={classes.formControl}>
-                        <InputLabel htmlFor="base-currency">Base amount</InputLabel>
+                        <InputLabel>Counter amount</InputLabel>
                         <Select
-                            value={selectedBaseCurrency}
-                            onChange={(event) => {
-                                setSelectedBaseCurrency(event.target.value);
-                                getBasedCurrency(event.target.value);
-                            }}
-                            inputProps={{name: 'baseCurrency', id: 'base-currency'}}>
-                            {availableCurrencies.map(curr => (
-                                <MenuItem value={curr}>{curr}</MenuItem>
+                            value={selectedCounterCurrency}
+                            onChange={(event) => setSelectedCounterCurrency(event.target.value)}>
+                            {counterCurrencyNames.map(curr => (
+                                <MenuItem value={curr} key={curr}>{curr}</MenuItem>
                             ))}
                         </Select>
                     </FormControl>
                 </Grid>
             </Grid>
+
+            <CurrencyChart base={selectedBaseCurrency}
+                           counter={selectedCounterCurrency}/>
         </div>
     );
 };
